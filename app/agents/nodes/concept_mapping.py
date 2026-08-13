@@ -21,7 +21,7 @@ async def concept_mapping_node(state: ResearchState) -> dict:
     LangGraph node: Expand intent into concepts, synonyms, MeSH terms.
 
     Input state:  intent
-    Output state: concepts, synonyms, mesh_terms
+    Output state: facets, mesh_terms
     """
     intent = state.get("intent", {})
     query = state.get("query", "")
@@ -39,18 +39,16 @@ async def concept_mapping_node(state: ResearchState) -> dict:
             raw = "\n".join(lines[1:-1])
 
         data = json.loads(raw)
-        concepts = data.get("concepts", [])
-        synonyms = data.get("synonyms", {})
+        facets = data.get("facets", {})
         mesh_terms = data.get("mesh_terms", [])
 
         logger.info(
             "concept_mapping_complete",
-            concepts=len(concepts),
+            facets_count=len(facets),
             mesh_terms=len(mesh_terms),
         )
         return {
-            "concepts": concepts,
-            "synonyms": synonyms,
+            "facets": facets,
             "mesh_terms": mesh_terms,
         }
 
@@ -59,15 +57,13 @@ async def concept_mapping_node(state: ResearchState) -> dict:
         # Fallback: use query words as concepts
         words = [w for w in query.split() if len(w) > 3]
         return {
-            "concepts": words[:5],
-            "synonyms": {},
+            "facets": {"query": words[:5]},
             "mesh_terms": [],
         }
     except Exception as e:
         logger.error("concept_mapping_failed", error=str(e))
         return {
-            "concepts": [],
-            "synonyms": {},
+            "facets": {},
             "mesh_terms": [],
             "errors": state.get("errors", []) + [f"concept_mapping: {e}"],
         }

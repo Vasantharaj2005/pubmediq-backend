@@ -13,34 +13,40 @@ logger = get_logger(__name__)
 
 
 def _build_keyword_query(
-    concepts: list[str],
-    synonyms: dict[str, list[str]],
+    facets: dict[str, list[str]],
     filters: dict,
 ) -> str:
     """
-    Build a PubMed keyword query with Boolean operators.
+    Build a PubMed keyword query with Boolean operators using a facet-based approach.
 
     Strategy:
-      Each concept group is ORed, then groups are ANDed together.
+      Terms within the same facet (e.g., condition) are ORed together.
+      Different facets (e.g., condition AND intervention) are ANDed together.
 
     Example:
-      (exercise OR "physical activity" OR "aerobic training")
-      AND (depression OR "depressive disorder" OR "major depression")
-      AND ("older adults" OR elderly OR "aged 65")
+      ("Alzheimer's disease" OR "Alzheimer disease" OR "senile dementia")
+      AND (treatment OR therapy OR intervention)
     """
     groups: list[str] = []
 
-    for concept in concepts[:5]:  # limit to 5 main concepts
-        terms = [concept]
-        if concept in synonyms:
-            terms.extend(synonyms[concept][:4])  # up to 4 synonyms
-
+    for facet, terms in facets.items():
+        if not terms:
+            continue
+        # Limit to top 5 terms per facet to avoid excessively long queries
+        facet_terms = terms[:5]
+        
         # Quote multi-word terms
-        quoted = [f'"{t}"' if " " in t else t for t in terms]
+        quoted = [f'"{t}"' if " " in t else t for t in facet_terms]
         group = " OR ".join(quoted)
         groups.append(f"({group})")
 
-    query = " AND ".join(groups) if groups else ""
+    if len(groups) > 1:
+        query = " AND ".join(groups)
+    elif len(groups) == 1:
+        query = groups[0]
+    else:
+        query = ""
+
     return query
 
 
@@ -51,7 +57,7 @@ def _build_mesh_query(mesh_terms: list[str]) -> str:
     """
     if not mesh_terms:
         return ""
-    tagged = [f'"{term}"[MeSH Terms]' for term in mesh_terms[:8]]
+    tagged = [f'"{term}"[MeSH]' for term in mesh_terms[:8]]
     return " AND ".join(tagged)
 
 
@@ -62,26 +68,25 @@ async def query_planner_node(state: ResearchState) -> dict:
     Input state:  concepts, synonyms, mesh_terms, filters
     Output state: keyword_query, mesh_query, semantic_query, search_strategy
     """
-    concepts = state.get("concepts", [])
-    synonyms = state.get("synonyms", {})
+    facets = state.get("facets", {})
     mesh_terms = state.get("mesh_terms", [])
     filters = state.get("filters", {})
     query = state.get("query", "")
 
     logger.info(
         "node_query_planner",
-        concepts=len(concepts),
+        facets_count=len(facets),
         mesh_terms=len(mesh_terms),
     )
 
-    keyword_query = _build_keyword_query(concepts, synonyms, filters)
+    keyword_query = _build_keyword_query(facets, filters)
     mesh_query = _build_mesh_query(mesh_terms)
 
     # If we couldn't build queries from concepts, fall back to raw query
     if not keyword_query:
         keyword_query = query
     if not mesh_query and mesh_terms:
-        mesh_query = " AND ".join(f'"{t}"[MeSH Terms]' for t in mesh_terms[:5])
+        mesh_query = " AND ".join(f'"{t}"[MeSH]' for t in mesh_terms[:5])
 
     # Semantic query = original query (will be embedded by semantic_search node)
     semantic_query = query
@@ -91,7 +96,7 @@ async def query_planner_node(state: ResearchState) -> dict:
         "mesh_query": mesh_query,
         "semantic_search": True,
         "mesh_terms": mesh_terms,
-        "concepts": concepts,
+        "facets": facets,
     }
 
     logger.info(

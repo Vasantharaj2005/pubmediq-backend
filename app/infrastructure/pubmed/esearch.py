@@ -11,8 +11,22 @@ from app.core.constants import PUBMED_DB, PUBMED_RETMODE
 from app.core.logging import get_logger
 from app.infrastructure.pubmed.client import PubMedClient
 from app.infrastructure.pubmed.exceptions import PubMedAPIError
+from app.domain.enums import StudyType
 
 logger = get_logger(__name__)
+
+# Map internal enum values to exact PubMed Publication Types
+PUB_TYPE_MAP = {
+    StudyType.RANDOMIZED_CONTROLLED_TRIAL: "Randomized Controlled Trial",
+    StudyType.SYSTEMATIC_REVIEW: "Systematic Review",
+    StudyType.META_ANALYSIS: "Meta-Analysis",
+    StudyType.CLINICAL_TRIAL: "Clinical Trial",
+    StudyType.OBSERVATIONAL: "Observational Study",
+    StudyType.COHORT_STUDY: "Cohort Study", # Mapped via standard mesh
+    StudyType.CASE_CONTROL: "Case-Control Studies", # usually mesh, but works as PT sometimes or mapped
+    StudyType.REVIEW: "Review",
+    StudyType.CASE_REPORT: "Case Reports",
+}
 
 
 async def esearch(
@@ -47,8 +61,14 @@ async def esearch(
         yr_to = year_to or 2030
         full_query += f' AND ("{yr_from}"[PDAT] : "{yr_to}"[PDAT])'
 
-    if pub_type:
-        full_query += f' AND "{pub_type}"[PT]'
+    if pub_type and pub_type != "any":
+        mapped_pt = PUB_TYPE_MAP.get(pub_type)
+        if mapped_pt:
+            full_query += f' AND "{mapped_pt}"[PT]'
+        else:
+            # Fallback if somehow a string is passed directly
+            clean_pt = str(pub_type).split(".")[-1].replace("_", " ").title()
+            full_query += f' AND "{clean_pt}"[PT]'
 
     params = {
         "db": db,

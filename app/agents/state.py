@@ -20,7 +20,7 @@ class ResearchState(TypedDict, total=False):
     Flow:
       query
         → intent (query_understanding node)
-        → concepts, synonyms, mesh_terms (concept_mapping node)
+        → facets, mesh_terms (concept_mapping node)
         → keyword_query, mesh_query, semantic_query (query_planner node)
         → pubmed_results, mesh_results, semantic_results (retrieval nodes)
         → fused_results (fusion node)
@@ -39,8 +39,7 @@ class ResearchState(TypedDict, total=False):
     intent: dict[str, Any]   # {population, intervention, condition, outcome, study_type}
 
     # ---- Concept Mapping ----
-    concepts: list[str]
-    synonyms: dict[str, list[str]]   # concept → [synonyms]
+    facets: dict[str, list[str]]   # facet_name → [term, synonyms]
     mesh_terms: list[str]
 
     # ---- Query Planning ----

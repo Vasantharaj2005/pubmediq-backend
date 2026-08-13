@@ -38,6 +38,10 @@ class PineconeClient:
         self._index = None
         self._available = False
 
+    @property
+    def is_available(self) -> bool:
+        return self._available
+
     def connect(self) -> None:
         """Initialize Pinecone connection. Called during app lifespan."""
         api_key = settings.PINECONE_API_KEY
