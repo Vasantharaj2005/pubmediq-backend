@@ -30,6 +30,11 @@ async def keyword_search_node(state: ResearchState) -> dict:
         logger.warning("keyword_search_no_query")
         return {"pubmed_results": []}
 
+    print(f"\n  ┌──────────────────────────────────────")
+    print(f"  │ [Node 4a/9] 🔑 KEYWORD SEARCH (PubMed ESearch)")
+    print(f"  │ Query: {keyword_query[:100]}")
+    print(f"  ├──────────────────────────────────────")
+    print(f"  │ Searching PubMed...")
     logger.info("node_keyword_search", query=keyword_query[:80])
 
     try:
@@ -42,6 +47,8 @@ async def keyword_search_node(state: ResearchState) -> dict:
         )
 
         if not pmids:
+            print(f"  │ ⚠️  No PMIDs returned from ESearch.")
+            print(f"  └──────────────────────────────────────")
             logger.info("keyword_search_no_pmids")
             return {"pubmed_results": []}
 
@@ -65,10 +72,16 @@ async def keyword_search_node(state: ResearchState) -> dict:
             for i, a in enumerate(articles)
         ]
 
+        print(f"  │ ✅ ESearch returned {len(pmids)} PMIDs. EFetch fetched {len(results)} articles.")
+        if results:
+            print(f"  │    Top results: {[r['pmid'] for r in results[:5]]}")
+        print(f"  └──────────────────────────────────────")
         logger.info("keyword_search_complete", result_count=len(results))
         return {"pubmed_results": results}
 
     except Exception as e:
+        print(f"  │ ❌ Keyword search FAILED: {e}")
+        print(f"  └──────────────────────────────────────")
         logger.error("keyword_search_failed", error=str(e))
         return {
             "pubmed_results": [],

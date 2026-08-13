@@ -25,6 +25,10 @@ async def concept_mapping_node(state: ResearchState) -> dict:
     """
     intent = state.get("intent", {})
     query = state.get("query", "")
+    print(f"\n  ┌──────────────────────────────────────")
+    print(f"  │ [Node 2/9] 📚 CONCEPT MAPPING")
+    print(f"  │ Expanding intent into biomedical facets + MeSH terms...")
+    print(f"  ├──────────────────────────────────────")
     logger.info("node_concept_mapping", intent=str(intent)[:100])
 
     system, human = build_concept_prompt(intent)
@@ -42,6 +46,12 @@ async def concept_mapping_node(state: ResearchState) -> dict:
         facets = data.get("facets", {})
         mesh_terms = data.get("mesh_terms", [])
 
+        print(f"  │ ✅ LLM returned {len(facets)} facets, {len(mesh_terms)} MeSH terms.")
+        for facet, terms in facets.items():
+            print(f"  │    {facet}: {terms}")
+        if mesh_terms:
+            print(f"  │    MeSH: {mesh_terms}")
+        print(f"  └──────────────────────────────────────")
         logger.info(
             "concept_mapping_complete",
             facets_count=len(facets),
@@ -53,6 +63,8 @@ async def concept_mapping_node(state: ResearchState) -> dict:
         }
 
     except json.JSONDecodeError as e:
+        print(f"  │ ⚠️  JSON decode error: {e}. Using query words as fallback facet.")
+        print(f"  └──────────────────────────────────────")
         logger.warning("concept_mapping_json_failed", error=str(e))
         # Fallback: use query words as concepts
         words = [w for w in query.split() if len(w) > 3]
@@ -61,6 +73,8 @@ async def concept_mapping_node(state: ResearchState) -> dict:
             "mesh_terms": [],
         }
     except Exception as e:
+        print(f"  │ ❌ LLM concept mapping FAILED: {e}")
+        print(f"  └──────────────────────────────────────")
         logger.error("concept_mapping_failed", error=str(e))
         return {
             "facets": {},

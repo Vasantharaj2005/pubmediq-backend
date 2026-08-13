@@ -73,6 +73,11 @@ async def query_planner_node(state: ResearchState) -> dict:
     filters = state.get("filters", {})
     query = state.get("query", "")
 
+    print(f"\n  ┌──────────────────────────────────────")
+    print(f"  │ [Node 3/9] 🗓️  QUERY PLANNER")
+    print(f"  │ Facets: {list(facets.keys())}, MeSH terms: {len(mesh_terms)}")
+    print(f"  ├──────────────────────────────────────")
+
     logger.info(
         "node_query_planner",
         facets_count=len(facets),
@@ -99,6 +104,10 @@ async def query_planner_node(state: ResearchState) -> dict:
         "facets": facets,
     }
 
+    print(f"  │ ✅ Keyword query : {keyword_query[:100]}")
+    print(f"  │    MeSH query   : {mesh_query[:100] or '(none)'}")
+    print(f"  │    Semantic     : '{semantic_query[:60]}'")
+    print(f"  └──────────────────────────────────────")
     logger.info(
         "query_planner_complete",
         keyword_len=len(keyword_query),

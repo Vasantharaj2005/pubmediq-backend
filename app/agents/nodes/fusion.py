@@ -34,6 +34,10 @@ async def fusion_node(state: ResearchState) -> dict:
     mesh_results = state.get("mesh_results", [])
     semantic_results = state.get("semantic_results", [])
 
+    print(f"\n  ┌──────────────────────────────────────")
+    print(f"  │ [Node 5/9] 🧲 FUSION (Reciprocal Rank Fusion)")
+    print(f"  │ Keyword={len(keyword_results)}, MeSH={len(mesh_results)}, Semantic={len(semantic_results)}")
+    print(f"  ├──────────────────────────────────────")
     logger.info(
         "node_fusion",
         keyword=len(keyword_results),
@@ -85,5 +89,10 @@ async def fusion_node(state: ResearchState) -> dict:
 
         fused.append(paper)
 
+    print(f"  │ ✅ Fused {len(fused)} unique articles. RRF scoring complete.")
+    if fused:
+        print(f"  │    Top PMIDs by RRF: {[f['pmid'] for f in fused[:5]]}")
+        print(f"  │    Sources: {[f.get('retrieval_sources') for f in fused[:3]]}")
+    print(f"  └──────────────────────────────────────")
     logger.info("fusion_complete", fused_count=len(fused))
     return {"fused_results": fused}

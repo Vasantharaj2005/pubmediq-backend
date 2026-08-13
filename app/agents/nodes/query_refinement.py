@@ -34,6 +34,11 @@ async def query_refinement_node(state: ResearchState) -> dict:
     quality_score = state.get("quality_score", 0.0)
     refinement_count = state.get("refinement_count", 0)
 
+    print(f"\n  ┌──────────────────────────────────────")
+    print(f"  │ [Node 8/9] 🔄 QUERY REFINEMENT (Attempt {refinement_count+1}/{MAX_REFINEMENTS})")
+    print(f"  │ Current query: {current_query[:100]}")
+    print(f"  ├──────────────────────────────────────")
+    print(f"  │ Asking LLM for better query formulation...")
     logger.info(
         "node_query_refinement",
         attempt=refinement_count + 1,
@@ -64,6 +69,9 @@ async def query_refinement_node(state: ResearchState) -> dict:
         refined_query = data.get("refined_query", current_query)
         reasoning = data.get("reasoning", "")
 
+        print(f"  │ ✅ Refined query: {refined_query[:100]}")
+        print(f"  │    Reasoning: {reasoning[:120]}")
+        print(f"  └──────────────────────────────────────")
         logger.info(
             "query_refinement_complete",
             refined_query=refined_query[:80],
@@ -83,6 +91,8 @@ async def query_refinement_node(state: ResearchState) -> dict:
         }
 
     except Exception as e:
+        print(f"  │ ❌ Query refinement FAILED: {e}")
+        print(f"  └──────────────────────────────────────")
         logger.error("query_refinement_failed", error=str(e))
         # Bump count even on failure to avoid infinite loop
         return {

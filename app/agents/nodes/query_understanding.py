@@ -25,6 +25,11 @@ async def query_understanding_node(state: ResearchState) -> dict:
     Output state: intent
     """
     query = state.get("query", "")
+    print(f"\n  ┌──────────────────────────────────────")
+    print(f"  │ [Node 1/9] 🧠 QUERY UNDERSTANDING")
+    print(f"  │ Input query: '{query[:80]}'")
+    print(f"  ├──────────────────────────────────────")
+    print(f"  │ Sending query to LLM for PICO intent extraction...")
     logger.info("node_query_understanding", query=query[:80])
 
     system, human = build_intent_prompt(query)
@@ -41,10 +46,17 @@ async def query_understanding_node(state: ResearchState) -> dict:
             raw = "\n".join(lines[1:-1])
 
         intent = json.loads(raw)
+        filled = {k: v for k, v in intent.items() if v is not None}
+        print(f"  │ ✅ LLM extracted intent successfully.")
+        for k, v in filled.items():
+            print(f"  │    {k}: {v}")
+        print(f"  └──────────────────────────────────────")
         logger.info("query_understanding_complete", intent_keys=list(intent.keys()))
         return {"intent": intent}
 
     except json.JSONDecodeError as e:
+        print(f"  │ ⚠️  JSON parse failed: {e}. Using fallback intent.")
+        print(f"  └──────────────────────────────────────")
         logger.warning("query_understanding_json_failed", error=str(e))
         # Graceful fallback: minimal intent from the query
         return {
@@ -58,6 +70,8 @@ async def query_understanding_node(state: ResearchState) -> dict:
             }
         }
     except Exception as e:
+        print(f"  │ ❌ LLM call FAILED: {e}")
+        print(f"  └──────────────────────────────────────")
         logger.error("query_understanding_failed", error=str(e))
         return {
             "intent": {"condition": query},

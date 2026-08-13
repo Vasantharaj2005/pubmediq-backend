@@ -82,8 +82,16 @@ async def reranker_node(state: ResearchState) -> dict:
     top_k = state.get("top_k", settings.DEFAULT_TOP_K)
 
     if not fused_results:
+        print(f"\n  ┌──────────────────────────────────────")
+        print(f"  │ [Node 6/9] 🎁 RERANKER — SKIPPED (no results to rank)")
+        print(f"  └──────────────────────────────────────")
         return {"reranked_results": [], "quality_score": 0.0}
 
+    print(f"\n  ┌──────────────────────────────────────")
+    print(f"  │ [Node 6/9] 🎁 RERANKER (CrossEncoder)")
+    print(f"  │ Cross-encoder model: ms-marco-MiniLM-L-6-v2")
+    print(f"  │ Candidates to score: {len(fused_results)}")
+    print(f"  ├──────────────────────────────────────")
     logger.info("node_reranker", candidates=len(fused_results))
 
     # Limit candidates to avoid slow reranking of huge lists
@@ -105,6 +113,11 @@ async def reranker_node(state: ResearchState) -> dict:
         if top_results else 0.0
     )
 
+    print(f"  │ ✅ Reranking done. Quality score = {round(quality_score, 4)}")
+    if reranked:
+        print(f"  │    Top scores: {[round(p['rerank_score'],4) for p in reranked[:5]]}")
+        print(f"  │    Top PMIDs : {[p['pmid'] for p in reranked[:5]]}")
+    print(f"  └──────────────────────────────────────")
     logger.info(
         "reranker_complete",
         reranked_count=len(reranked),

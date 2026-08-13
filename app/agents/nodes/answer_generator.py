@@ -33,6 +33,9 @@ async def answer_generator_node(state: ResearchState) -> dict:
     query = state.get("query", "")
 
     if not reranked_results:
+        print(f"\n  ┌──────────────────────────────────────")
+        print(f"  │ [Node 9/9] ✍️  ANSWER GENERATOR — SKIPPED (no results)")
+        print(f"  └──────────────────────────────────────")
         logger.warning("answer_generator_no_results")
         return {
             "final_answer": (
@@ -43,6 +46,10 @@ async def answer_generator_node(state: ResearchState) -> dict:
         }
 
     papers = reranked_results[:SYNTHESIS_MAX_PAPERS]
+    print(f"\n  ┌──────────────────────────────────────")
+    print(f"  │ [Node 9/9] ✍️  ANSWER GENERATOR (LLM Synthesis)")
+    print(f"  │ Synthesising answer from {len(papers)} top papers...")
+    print(f"  ├──────────────────────────────────────")
     logger.info("node_answer_generator", paper_count=len(papers))
 
     system, human = build_answer_prompt(query=query, papers=papers)
@@ -58,6 +65,10 @@ async def answer_generator_node(state: ResearchState) -> dict:
         # Extract cited PMIDs from the answer
         cited_pmids = list(dict.fromkeys(_PMID_RE.findall(answer)))  # deduplicated
 
+        print(f"  │ ✅ AI synthesis complete. Length={len(answer)} chars, Citations={len(cited_pmids)}")
+        if cited_pmids:
+            print(f"  │    Cited PMIDs: {cited_pmids[:8]}")
+        print(f"  └──────────────────────────────────────")
         logger.info(
             "answer_generator_complete",
             answer_len=len(answer),
@@ -70,6 +81,8 @@ async def answer_generator_node(state: ResearchState) -> dict:
         }
 
     except Exception as e:
+        print(f"  │ ❌ Answer generation FAILED: {e}. Using fallback.")
+        print(f"  └──────────────────────────────────────")
         logger.error("answer_generator_failed", error=str(e))
         # Graceful fallback: return structured list of top papers
         fallback = _build_fallback_answer(papers)

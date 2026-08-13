@@ -70,16 +70,29 @@ class SearchService:
         session_id = request.session_id or str(uuid.uuid4())
 
         # 1. Check cache
+        print(f"\n{'='*60}")
+        print(f"🔍  PUBMEDIQ SEARCH PIPELINE STARTED")
+        print(f"{'='*60}")
+        print(f"   Query   : {request.query}")
+        print(f"   TopK    : {request.top_k}")
+        print(f"   Filters : {request.filters.model_dump() if request.filters else 'none'}")
+        print(f"   Session : {session_id}")
+        print(f"{'='*60}")
+
         if self._cache:
+            print(f"\n[Step 1/6] 🗄️  Checking Redis cache...")
             filters_dict = request.filters.model_dump() if request.filters else {}
             cached = await self._cache.get_cached_search(request.query, filters_dict)
             if cached:
+                print(f"           ✅  Cache HIT — returning cached results instantly.")
                 logger.info("search_cache_hit", session_id=session_id)
                 response = SearchResponse(**cached)
                 response.cached = True
                 return response
+            print(f"           ❌  Cache MISS — proceeding with full pipeline.")
 
         # 2. Build initial state
+        print(f"\n[Step 2/6] 🧱  Building initial LangGraph state...")
         initial_state: ResearchState = {
             "query": request.query,
             "session_id": session_id,
@@ -88,12 +101,19 @@ class SearchService:
             "refinement_count": 0,
             "errors": [],
         }
+        print(f"           ✅  State initialised.")
 
         # 3. Run LangGraph pipeline
+        print(f"\n[Step 3/6] 🤖  Invoking LangGraph research pipeline...")
+        print(f"           Graph nodes: query_understanding → concept_mapping → query_planner")
+        print(f"                        → [keyword | mesh | semantic] (parallel)")
+        print(f"                        → fusion → reranker → quality_gate → [synthesize | refine]")
         logger.info("search_pipeline_start", query=request.query[:80], session_id=session_id)
         try:
             final_state: ResearchState = await self._graph.ainvoke(initial_state)
+            print(f"           ✅  Graph execution complete.")
         except Exception as e:
+            print(f"           ❌  Graph execution FAILED: {e}")
             logger.error("search_pipeline_failed", error=str(e))
             return SearchResponse(
                 session_id=session_id,
@@ -104,9 +124,12 @@ class SearchService:
             )
 
         # 4. Format response
+        print(f"\n[Step 4/6] 📋  Formatting results...")
         response = self._format_response(final_state, session_id)
+        print(f"           ✅  {response.total_results} results formatted. Quality={response.quality.score if response.quality else 0:.4f}")
 
         # 5. Save to history
+        print(f"\n[Step 5/6] 💾  Saving to search history...")
         if user_id:
             try:
                 await self._history_repo.create(
@@ -119,18 +142,34 @@ class SearchService:
                     refined=final_state.get("refinement_count", 0) > 0,
                     refinement_count=final_state.get("refinement_count", 0),
                 )
+                print(f"           ✅  History saved for user_id={user_id[:8]}...")
             except Exception as e:
+                print(f"           ⚠️   History save failed: {e}")
                 logger.warning("history_save_failed", error=str(e))
+        else:
+            print(f"           ⏭️   Anonymous request — history not saved.")
 
         # 6. Cache results
+        print(f"\n[Step 6/6] 🗄️  Writing results to Redis cache...")
         if self._cache:
             try:
                 filters_dict = request.filters.model_dump() if request.filters else {}
                 await self._cache.cache_search_results(
                     request.query, filters_dict, response.model_dump()
                 )
+                print(f"           ✅  Cached successfully.")
             except Exception as e:
+                print(f"           ⚠️   Cache write failed: {e}")
                 logger.warning("search_cache_write_failed", error=str(e))
+        else:
+            print(f"           ⏭️   Cache not configured — skipping.")
+
+        print(f"\n{'='*60}")
+        print(f"✅  PIPELINE COMPLETE — {response.total_results} results returned")
+        print(f"    Quality : {response.quality.score if response.quality else 0:.4f} ({response.quality.level if response.quality else 'n/a'})")
+        print(f"    Refined : {response.quality.refined if response.quality else False} (x{response.quality.refinement_count if response.quality else 0})")
+        print(f"    AI Summary chars: {len(response.ai_summary or '')}")
+        print(f"{'='*60}\n")
 
         return response
 

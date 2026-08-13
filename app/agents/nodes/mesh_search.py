@@ -29,9 +29,17 @@ async def mesh_search_node(state: ResearchState) -> dict:
     top_k = state.get("top_k", settings.DEFAULT_TOP_K)
 
     if not mesh_query and not mesh_terms:
+        print(f"\n  ┌──────────────────────────────────────")
+        print(f"  │ [Node 4b/9] 🏷️  MESH SEARCH — SKIPPED (no MeSH terms)")
+        print(f"  └──────────────────────────────────────")
         logger.warning("mesh_search_no_query")
         return {"mesh_results": []}
 
+    print(f"\n  ┌──────────────────────────────────────")
+    print(f"  │ [Node 4b/9] 🏷️  MESH SEARCH (PubMed MeSH)")
+    print(f"  │ MeSH query: {mesh_query[:100]}")
+    print(f"  │ MeSH terms: {mesh_terms}")
+    print(f"  ├──────────────────────────────────────")
     logger.info("node_mesh_search", mesh_terms=len(mesh_terms))
 
     try:
@@ -49,6 +57,8 @@ async def mesh_search_node(state: ResearchState) -> dict:
             )
 
         if not pmids:
+            print(f"  │ ⚠️  No PMIDs from MeSH search.")
+            print(f"  └──────────────────────────────────────")
             return {"mesh_results": []}
 
         articles = await efetch(pmids[:top_k])
@@ -71,10 +81,14 @@ async def mesh_search_node(state: ResearchState) -> dict:
             for i, a in enumerate(articles)
         ]
 
+        print(f"  │ ✅ MeSH search returned {len(pmids)} PMIDs, fetched {len(results)} articles.")
+        print(f"  └──────────────────────────────────────")
         logger.info("mesh_search_complete", result_count=len(results))
         return {"mesh_results": results}
 
     except Exception as e:
+        print(f"  │ ❌ MeSH search FAILED: {e}")
+        print(f"  └──────────────────────────────────────")
         logger.error("mesh_search_failed", error=str(e))
         return {
             "mesh_results": [],

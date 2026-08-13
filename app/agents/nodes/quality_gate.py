@@ -28,16 +28,27 @@ def quality_gate_router(state: ResearchState) -> str:
     refinement_count = state.get("refinement_count", 0)
     reranked_results = state.get("reranked_results", [])
 
+    print(f"\n  ┌──────────────────────────────────────")
+    print(f"  │ [Node 7/9] 🚦 QUALITY GATE")
+    print(f"  │ score={quality_score:.4f}, threshold={QUALITY_THRESHOLD}, refinements={refinement_count}/{MAX_REFINEMENTS}")
+    print(f"  ├──────────────────────────────────────")
+
     # If we have no results at all, check refinement budget
     if not reranked_results:
         if refinement_count < MAX_REFINEMENTS:
+            print(f"  │ 🔄 No results — routing to QUERY REFINEMENT (attempt {refinement_count+1})")
+            print(f"  └──────────────────────────────────────")
             logger.info("quality_gate_no_results_refine", refinements=refinement_count)
             return "refine"
+        print(f"  │ ⚠️  Max refinements reached. Accepting with 0 results.")
+        print(f"  └──────────────────────────────────────")
         logger.info("quality_gate_no_results_accept")
         return "synthesize"
 
     # If quality is sufficient → generate answer
     if quality_score >= QUALITY_THRESHOLD:
+        print(f"  │ ✅ Quality PASS ({quality_score:.4f} >= {QUALITY_THRESHOLD}) — routing to SYNTHESIS")
+        print(f"  └──────────────────────────────────────")
         logger.info(
             "quality_gate_pass",
             score=round(quality_score, 4),
@@ -47,6 +58,8 @@ def quality_gate_router(state: ResearchState) -> str:
 
     # If refinement budget is exhausted → accept current results
     if refinement_count >= MAX_REFINEMENTS:
+        print(f"  │ ⏳ Max refinements exhausted. Score={quality_score:.4f}. Accepting results.")
+        print(f"  └──────────────────────────────────────")
         logger.info(
             "quality_gate_max_refinements",
             score=round(quality_score, 4),
@@ -55,6 +68,8 @@ def quality_gate_router(state: ResearchState) -> str:
         return "synthesize"
 
     # Results are poor and we have budget → refine
+    print(f"  │ 🔄 Quality FAIL ({quality_score:.4f} < {QUALITY_THRESHOLD}) — routing to REFINEMENT")
+    print(f"  └──────────────────────────────────────")
     logger.info(
         "quality_gate_fail_refine",
         score=round(quality_score, 4),

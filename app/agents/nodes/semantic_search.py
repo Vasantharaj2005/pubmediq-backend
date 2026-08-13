@@ -31,9 +31,17 @@ async def semantic_search_node(state: ResearchState) -> dict:
         return {"semantic_results": []}
 
     if not pinecone_client.is_available:
+        print(f"\n  ┌──────────────────────────────────────")
+        print(f"  │ [Node 4c/9] 🧠 SEMANTIC SEARCH — SKIPPED (Pinecone unavailable)")
+        print(f"  └──────────────────────────────────────")
         logger.warning("semantic_search_pinecone_unavailable")
         return {"semantic_results": []}
 
+    print(f"\n  ┌──────────────────────────────────────")
+    print(f"  │ [Node 4c/9] 🧠 SEMANTIC SEARCH (Pinecone + S-PubMedBert)")
+    print(f"  │ Query: '{semantic_query[:80]}'")
+    print(f"  ├──────────────────────────────────────")
+    print(f"  │ Embedding query and querying Pinecone...")
     logger.info("node_semantic_search", query=semantic_query[:80])
 
     try:
@@ -71,10 +79,16 @@ async def semantic_search_node(state: ResearchState) -> dict:
             for i, m in enumerate(matches)
         ]
 
+        print(f"  │ ✅ Pinecone returned {len(results)} semantic results.")
+        if results:
+            print(f"  │    Top scores: {[round(r['semantic_score'],4) for r in results[:5]]}")
+        print(f"  └──────────────────────────────────────")
         logger.info("semantic_search_complete", result_count=len(results))
         return {"semantic_results": results}
 
     except Exception as e:
+        print(f"  │ ❌ Semantic search FAILED: {e}")
+        print(f"  └──────────────────────────────────────")
         logger.error("semantic_search_failed", error=str(e))
         return {
             "semantic_results": [],
