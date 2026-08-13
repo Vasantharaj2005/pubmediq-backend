@@ -19,7 +19,10 @@ os.environ.setdefault("APP_ENV", "testing")
 os.environ.setdefault("DEBUG", "False")
 os.environ.setdefault("SECRET_KEY", "test-secret-key-that-is-at-least-32-chars!!!")
 os.environ.setdefault("JWT_SECRET_KEY", "test-jwt-secret-that-is-at-least-32-chars!!!")
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+os.environ.setdefault(
+    "DATABASE_URL",
+    os.environ.get("TEST_DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/pubmediq")
+)
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
 os.environ.setdefault("GROQ_API_KEY", "")
 os.environ.setdefault("GOOGLE_API_KEY", "")

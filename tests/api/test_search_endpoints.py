@@ -108,17 +108,18 @@ class TestSearchEndpoint:
 
 @pytest.mark.asyncio
 class TestRefineEndpoint:
-    async def test_refine_session_not_found(self, client):
-        with (
-            patch("app.api.v1.endpoints.search._get_cache") as mock_get_cache,
-        ):
-            mock_cache = AsyncMock()
-            mock_cache.get_cached_session = AsyncMock(return_value=None)
-            mock_get_cache.return_value = mock_cache
+    async def test_refine_session_not_found(self, app, client):
+        from app.api.v1.endpoints.search import _get_cache
+        mock_cache = AsyncMock()
+        mock_cache.get_cached_session = AsyncMock(return_value=None)
+        app.dependency_overrides[_get_cache] = lambda: mock_cache
 
+        try:
             resp = await client.post("/api/v1/search/refine", json={
                 "session_id": "nonexistent-session",
             })
+        finally:
+            app.dependency_overrides.pop(_get_cache, None)
 
         assert resp.status_code == 200
         data = resp.json()

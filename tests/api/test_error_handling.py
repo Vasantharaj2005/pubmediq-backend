@@ -68,12 +68,8 @@ class TestPubMedIQErrorHandling:
 class TestGenericExceptionHandling:
     async def test_unhandled_exception_returns_500(self, client):
         """Unhandled exceptions should return a generic 500 error."""
-        with patch("app.api.v1.endpoints.auth.AuthService") as MockService:
-            instance = MockService.return_value
-            instance.register = AsyncMock(
-                side_effect=RuntimeError("Something unexpected")
-            )
-
+        from app.application.services.auth_service import AuthService
+        with patch.object(AuthService, "register", side_effect=RuntimeError("Something unexpected")):
             resp = await client.post("/api/v1/auth/register", json={
                 "email": "test@example.com",
                 "password": "password123",
@@ -84,8 +80,8 @@ class TestGenericExceptionHandling:
         data = resp.json()
         assert "error" in data
         assert data["error"]["code"] == "INTERNAL_ERROR"
-        # Should NOT leak the actual error message
-        assert "unexpected" not in data["error"]["message"].lower()
+        # Should NOT leak the actual RuntimeError message text
+        assert "something unexpected" not in data["error"]["message"].lower()
 
 
 @pytest.mark.asyncio

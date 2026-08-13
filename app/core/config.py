@@ -64,10 +64,10 @@ class Settings(BaseSettings):
     POSTGRES_HOST: str = "localhost"
     POSTGRES_PORT: int = 5432
     POSTGRES_DB: str = "pubmediq"
-    POSTGRES_USER: str = "pubmediq_user"
-    POSTGRES_PASSWORD: str = "password"
+    POSTGRES_USER: str = "postgres"
+    POSTGRES_PASSWORD: str = "postgres"
     DATABASE_URL: str = (
-        "postgresql+asyncpg://pubmediq_user:password@localhost:5432/pubmediq"
+        "postgresql+asyncpg://postgres:postgres@localhost:5432/pubmediq"
     )
 
     # ------------------------------------------------------------------

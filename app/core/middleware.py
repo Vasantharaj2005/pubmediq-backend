@@ -40,7 +40,21 @@ class CorrelationIDMiddleware(BaseHTTPMiddleware):
         # Store on request state for use in endpoints
         request.state.request_id = request_id
 
-        response = await call_next(request)
+        try:
+            response = await call_next(request)
+        except Exception:
+            logger.error("unhandled_exception_in_middleware", path=request.url.path, exc_info=True)
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "error": {
+                        "code": "INTERNAL_ERROR",
+                        "message": "An unexpected error occurred.",
+                    }
+                },
+                headers={"X-Request-ID": request_id},
+            )
         response.headers["X-Request-ID"] = request_id
         return response
 
