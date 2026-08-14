@@ -75,7 +75,7 @@ class SearchService:
         print(f"{'='*60}")
         print(f"   Query   : {request.query}")
         print(f"   TopK    : {request.top_k}")
-        print(f"   Filters : {request.filters.model_dump() if request.filters else 'none'}")
+        print(f"   Filters : {request.filters.model_dump(mode='json') if request.filters else 'none'}")
         print(f"   Session : {session_id}")
         print(f"{'='*60}")
 
