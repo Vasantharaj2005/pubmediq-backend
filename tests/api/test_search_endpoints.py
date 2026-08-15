@@ -110,20 +110,20 @@ class TestSearchEndpoint:
 class TestRefineEndpoint:
     async def test_refine_session_not_found(self, app, client):
         from app.api.v1.endpoints.search import _get_cache
+        from app.infrastructure.database.repositories.history_repository import HistoryRepository
         mock_cache = AsyncMock()
         mock_cache.get_cached_session = AsyncMock(return_value=None)
         app.dependency_overrides[_get_cache] = lambda: mock_cache
 
-        try:
-            resp = await client.post("/api/v1/search/refine", json={
-                "session_id": "nonexistent-session",
-            })
-        finally:
-            app.dependency_overrides.pop(_get_cache, None)
+        with patch.object(HistoryRepository, "get_by_id", new_callable=AsyncMock, return_value=None):
+            try:
+                resp = await client.post("/api/v1/search/refine", json={
+                    "session_id": "12345678-1234-5678-1234-567812345678",
+                })
+            finally:
+                app.dependency_overrides.pop(_get_cache, None)
 
-        assert resp.status_code == 200
-        data = resp.json()
-        assert "not found" in data["ai_summary"].lower()
+        assert resp.status_code == 404
 
     async def test_refine_missing_session_id(self, client):
         resp = await client.post("/api/v1/search/refine", json={})
