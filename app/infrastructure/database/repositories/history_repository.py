@@ -22,6 +22,7 @@ class HistoryRepository:
         self,
         user_id: str | uuid.UUID,
         query: str,
+        record_id: str | uuid.UUID | None = None,  # use session_id as PK when provided
         intent: dict | None = None,
         search_strategy: dict | None = None,
         results_count: int = 0,
@@ -29,10 +30,19 @@ class HistoryRepository:
         refined: bool = False,
         refinement_count: int = 0,
     ) -> SearchHistoryModel:
-        """Persist a search history record."""
+        """Persist a search history record.
+
+        Args:
+            record_id: Use the search session_id as the PK so the refine
+                       endpoint can look it up directly. Falls back to a new
+                       uuid4() if not supplied.
+        """
         uid = uuid.UUID(str(user_id)) if isinstance(user_id, str) else user_id
+        rid = (
+            uuid.UUID(str(record_id)) if isinstance(record_id, str) else record_id
+        ) if record_id else uuid.uuid4()
         record = SearchHistoryModel(
-            id=uuid.uuid4(),
+            id=rid,
             user_id=uid,
             query=query,
             intent=intent,
@@ -67,10 +77,25 @@ class HistoryRepository:
     async def get_by_id(
         self, record_id: str | uuid.UUID
     ) -> SearchHistoryModel | None:
-        """Fetch a single history record by ID."""
+        """Fetch a single history record by ID (no user ownership check)."""
         rid = uuid.UUID(str(record_id)) if isinstance(record_id, str) else record_id
         result = await self._db.execute(
             select(SearchHistoryModel).where(SearchHistoryModel.id == rid)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_by_id_for_user(
+        self,
+        record_id: str | uuid.UUID,
+        user_id: str | uuid.UUID,
+    ) -> SearchHistoryModel | None:
+        """Fetch a history record only if it belongs to the given user (secure lookup)."""
+        rid = uuid.UUID(str(record_id)) if isinstance(record_id, str) else record_id
+        uid = uuid.UUID(str(user_id)) if isinstance(user_id, str) else user_id
+        result = await self._db.execute(
+            select(SearchHistoryModel)
+            .where(SearchHistoryModel.id == rid)
+            .where(SearchHistoryModel.user_id == uid)
         )
         return result.scalar_one_or_none()
 

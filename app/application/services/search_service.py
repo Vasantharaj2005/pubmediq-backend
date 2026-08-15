@@ -6,8 +6,15 @@ Handles caching, history persistence, and result formatting.
 """
 from __future__ import annotations
 
+import sys
 import uuid
 from typing import Any
+
+# Force UTF-8 output so emoji print statements don't crash on Windows (CP1252)
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,6 +34,7 @@ from app.schemas.search import (
 )
 
 logger = get_logger(__name__)
+
 
 
 class SearchService:
@@ -128,11 +136,12 @@ class SearchService:
         response = self._format_response(final_state, session_id)
         print(f"           ✅  {response.total_results} results formatted. Quality={response.quality.score if response.quality else 0:.4f}")
 
-        # 5. Save to history
-        print(f"\n[Step 5/6] 💾  Saving to search history...")
+        # 5. Save to history (use session_id as the record PK so refine can look it up)
+        print(f"\n[Step 5/6] Saving to search history...")
         if user_id:
             try:
                 await self._history_repo.create(
+                    record_id=session_id,         # <-- key fix: PK = session_id
                     user_id=user_id,
                     query=request.query,
                     intent=final_state.get("intent"),
@@ -142,27 +151,35 @@ class SearchService:
                     refined=final_state.get("refinement_count", 0) > 0,
                     refinement_count=final_state.get("refinement_count", 0),
                 )
-                print(f"           ✅  History saved for user_id={user_id[:8]}...")
+                print(f"           OK  History saved. record_id={session_id} user={user_id[:8]}...")
             except Exception as e:
-                print(f"           ⚠️   History save failed: {e}")
+                print(f"           WARN History save failed: {e}")
                 logger.warning("history_save_failed", error=str(e))
         else:
-            print(f"           ⏭️   Anonymous request — history not saved.")
+            print(f"           --  Anonymous request — DB history not saved.")
 
-        # 6. Cache results
-        print(f"\n[Step 6/6] 🗄️  Writing results to Redis cache...")
+        # 6. Cache results + session state
+        print(f"\n[Step 6/6] Writing results to Redis cache...")
         if self._cache:
             try:
-                filters_dict = request.filters.model_dump() if request.filters else {}
+                filters_dict = request.filters.model_dump(mode="json") if request.filters else {}
                 await self._cache.cache_search_results(
-                    request.query, filters_dict, response.model_dump()
+                    request.query, filters_dict, response.model_dump(mode="json")
                 )
-                print(f"           ✅  Cached successfully.")
+                # Also cache session state so /search/refine can find it (anonymous OR authenticated)
+                session_state = {
+                    "query": request.query,
+                    "top_k": request.top_k,
+                    "filters": filters_dict,
+                    "user_id": user_id,
+                }
+                await self._cache.cache_session(session_id, session_state)
+                print(f"           OK  Search results + session cached. session_id={session_id}")
             except Exception as e:
-                print(f"           ⚠️   Cache write failed: {e}")
+                print(f"           WARN Cache write failed: {e}")
                 logger.warning("search_cache_write_failed", error=str(e))
         else:
-            print(f"           ⏭️   Cache not configured — skipping.")
+            print(f"           --  Cache not configured — skipping.")  
 
         print(f"\n{'='*60}")
         print(f"✅  PIPELINE COMPLETE — {response.total_results} results returned")
