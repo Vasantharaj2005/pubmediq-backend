@@ -125,19 +125,27 @@ class ResearchService:
         citations = list(dict.fromkeys(re.findall(r"\[PMID:\s*(\d+)\]", answer)))
         return ResearchResponse(answer=answer, citations=citations, pmids_used=request.pmids)
 
-    async def ask(self, request: AskRequest, cache: CacheService | None = None) -> ResearchResponse:
+    async def ask(self, request: AskRequest, user_id: str) -> ResearchResponse:
         """Answer a follow-up question using session context."""
-        # Retrieve session state
-        session_state = {}
-        if cache:
-            session_state = await cache.get_cached_session(request.session_id) or {}
-
-        papers = session_state.get("results", [])[:10]
-        if not papers:
+        from app.infrastructure.database.repositories.history_repository import HistoryRepository
+        
+        repo = HistoryRepository(self._db)
+        history_record = await repo.get_by_id_for_user(request.session_id, user_id)
+        
+        if not history_record:
             return ResearchResponse(
                 answer="No search session found. Please run a search first.",
                 citations=[],
             )
+
+        papers = history_record.results or []
+        if not papers:
+            return ResearchResponse(
+                answer="No papers found in this search session.",
+                citations=[],
+            )
+        
+        papers = papers[:10]
 
         evidence = self._format_evidence(papers)
         answer = await self._llm.invoke(

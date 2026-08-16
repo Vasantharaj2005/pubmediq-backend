@@ -70,12 +70,11 @@ async def ask(
     request: AskRequest,
     db: AsyncSession = Depends(get_db),
     current_user: UserModel = Depends(require_active_user),
-    cache: CacheService = Depends(_get_cache),
 ) -> ResearchResponse:
     """
     Ask a follow-up question about a previous search session.
 
     Example: "Which study had the largest sample size?"
     """
-    service = ResearchService(db=db, cache=cache)
-    return await service.ask(request, cache=cache)
+    service = ResearchService(db=db)
+    return await service.ask(request, user_id=str(current_user.id))
