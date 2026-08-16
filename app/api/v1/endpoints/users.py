@@ -25,21 +25,69 @@ history_router = APIRouter(prefix="/history", tags=["History"])
 async def get_history(
     current_user: UserModel = Depends(require_active_user),
     db: AsyncSession = Depends(get_db),
+    limit: int = 50,
+    offset: int = 0,
 ) -> list[dict]:
-    """Return the authenticated user's search history (newest first)."""
+    """Return the authenticated user's search history (newest first).
+
+    Each record includes:
+    - Metadata (query, quality, timestamps)
+    - Full paper results array (same structure as /search response)
+    - AI-generated summary and citation list
+    """
     service = HistoryService(db)
-    records = await service.get_history(str(current_user.id))
+    records = await service.get_history(str(current_user.id), limit=limit)
     return [
         {
             "id": str(r.id),
             "query": r.query,
+            "intent": r.intent,
+            "search_strategy": r.search_strategy,
             "results_count": r.results_count,
             "quality_score": r.quality_score,
             "refined": r.refined,
+            "refinement_count": r.refinement_count,
+            "results": r.results or [],          # full paper list (None for old rows)
+            "ai_summary": r.ai_summary,
+            "citations": r.citations or [],
             "created_at": r.created_at.isoformat(),
         }
         for r in records
     ]
+
+
+@history_router.get("/{record_id}", summary="Get full detail of a single history record")
+async def get_history_detail(
+    record_id: str,
+    current_user: UserModel = Depends(require_active_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Return the full detail of a single past search including all papers and AI summary."""
+    from fastapi import HTTPException, status
+    from app.core.exceptions import HistoryNotFoundError, PermissionDeniedError
+    service = HistoryService(db)
+    try:
+        r = await service.get_by_id(str(current_user.id), record_id)
+    except HistoryNotFoundError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="History record not found.")
+    except PermissionDeniedError:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="You do not have access to this record.")
+    return {
+        "id": str(r.id),
+        "query": r.query,
+        "intent": r.intent,
+        "search_strategy": r.search_strategy,
+        "results_count": r.results_count,
+        "quality_score": r.quality_score,
+        "refined": r.refined,
+        "refinement_count": r.refinement_count,
+        "results": r.results or [],
+        "ai_summary": r.ai_summary,
+        "citations": r.citations or [],
+        "created_at": r.created_at.isoformat(),
+    }
 
 
 @history_router.delete(

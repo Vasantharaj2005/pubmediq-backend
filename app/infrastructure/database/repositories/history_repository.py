@@ -29,13 +29,18 @@ class HistoryRepository:
         quality_score: float | None = None,
         refined: bool = False,
         refinement_count: int = 0,
+        results: list | None = None,
+        ai_summary: str | None = None,
+        citations: list | None = None,
     ) -> SearchHistoryModel:
-        """Persist a search history record.
+        """Persist a search history record with optional full result payload.
 
         Args:
-            record_id: Use the search session_id as the PK so the refine
-                       endpoint can look it up directly. Falls back to a new
-                       uuid4() if not supplied.
+            record_id:  Use the search session_id as the PK so the refine
+                        endpoint can look it up directly. Falls back to uuid4.
+            results:    Full list of serialised PaperResult dicts.
+            ai_summary: LLM-generated evidence synthesis text.
+            citations:  List of cited PMID strings.
         """
         uid = uuid.UUID(str(user_id)) if isinstance(user_id, str) else user_id
         rid = (
@@ -51,6 +56,9 @@ class HistoryRepository:
             quality_score=quality_score,
             refined=refined,
             refinement_count=refinement_count,
+            results=results,
+            ai_summary=ai_summary,
+            citations=citations,
         )
         self._db.add(record)
         await self._db.flush()

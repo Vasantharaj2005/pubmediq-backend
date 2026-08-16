@@ -140,8 +140,10 @@ class SearchService:
         print(f"\n[Step 5/6] Saving to search history...")
         if user_id:
             try:
+                # Serialise paper results to plain dicts for JSONB storage
+                serialised_results = [p.model_dump(mode="json") for p in response.results]
                 await self._history_repo.create(
-                    record_id=session_id,         # <-- key fix: PK = session_id
+                    record_id=session_id,         # PK = session_id (so refine can find it)
                     user_id=user_id,
                     query=request.query,
                     intent=final_state.get("intent"),
@@ -150,13 +152,18 @@ class SearchService:
                     quality_score=final_state.get("quality_score"),
                     refined=final_state.get("refinement_count", 0) > 0,
                     refinement_count=final_state.get("refinement_count", 0),
+                    results=serialised_results,
+                    ai_summary=response.ai_summary,
+                    citations=response.citations,
                 )
-                print(f"           OK  History saved. record_id={session_id} user={user_id[:8]}...")
+                print(f"           OK  History saved. record_id={session_id} "
+                      f"user={user_id[:8]}... papers={response.total_results}")
             except Exception as e:
                 print(f"           WARN History save failed: {e}")
                 logger.warning("history_save_failed", error=str(e))
         else:
-            print(f"           --  Anonymous request — DB history not saved.")
+            print(f"           --  Anonymous request -- DB history not saved.")
+
 
         # 6. Cache results + session state
         print(f"\n[Step 6/6] Writing results to Redis cache...")
