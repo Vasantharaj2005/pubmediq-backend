@@ -32,14 +32,14 @@ RUN apt-get update && apt-get install -y \
     && useradd -r -g pubmediq pubmediq
 
 # Copy installed packages from builder
-COPY --from=builder /root/.local /home/pubmediq/.local
+COPY --from=builder --chown=pubmediq:pubmediq /root/.local /home/pubmediq/.local
 
 # Copy application code
-COPY app/ ./app/
-COPY alembic.ini .
-COPY pyproject.toml .
+COPY --chown=pubmediq:pubmediq app/ ./app/
+COPY --chown=pubmediq:pubmediq alembic.ini .
+COPY --chown=pubmediq:pubmediq pyproject.toml .
 
-# Set ownership
+# Set ownership of /app directory
 RUN chown -R pubmediq:pubmediq /app
 
 # Switch to non-root user
