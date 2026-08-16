@@ -16,7 +16,6 @@ permissions:
   contents: read
 
 env:
-  # The name of your image on Docker Hub
   IMAGE_NAME: pubmediq-backend
 
 jobs:
@@ -27,7 +26,7 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -62,26 +61,26 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Using a bash script to sanitize the username in case of trailing spaces
       - name: Build and push Docker image
         run: |
           USERNAME=$(echo "${{ secrets.DOCKER_USERNAME }}" | tr -d '[:space:]')
           REPO="${USERNAME}/${{ env.IMAGE_NAME }}"
           echo "Building and pushing to $REPO"
-          
+
+          # FIX: removed --context, using . as context at the end
           docker buildx build \
-            --context . \
             --file ./Dockerfile \
             --push \
             --tag "$REPO:main" \
             --tag "$REPO:sha-${{ github.sha }}" \
             --cache-from type=gha \
-            --cache-to type=gha,mode=max
+            --cache-to type=gha,mode=max \
+            .
 
   continuous_deployment:
     name: Deploy to AWS EC2
     needs: push_to_registry
-    runs-on: self-hosted
+    runs-on: self-hosted  # <-- make sure you have a self-hosted runner on EC2
 
     steps:
       - name: Log in to Docker Hub
@@ -96,17 +95,15 @@ jobs:
         run: |
           USERNAME=$(echo "${{ secrets.DOCKER_USERNAME }}" | tr -d '[:space:]')
           IMAGE_PATH="${USERNAME}/${{ env.IMAGE_NAME }}"
-          
+
           echo "Pulling $IMAGE_PATH:main"
           docker pull "$IMAGE_PATH:main"
-          
-          # Ensure postgres and redis are running first
+
+          # Ensure postgres and redis are running first (if not already)
           docker-compose up -d postgres redis
-          
-          # Overwrite the app image tag to the pulled main image dynamically
+
+          # Override the app image tag and restart app only
           export APP_IMAGE="${IMAGE_PATH}:main"
-          
-          # Recreate only the FastAPI app container with zero DB downtime
           docker-compose up -d --no-deps --force-recreate app
 
       - name: Verify container is running
