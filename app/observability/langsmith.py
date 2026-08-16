@@ -23,9 +23,14 @@ def setup_langsmith() -> None:
 
     try:
         import os
-        os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
-        os.environ.setdefault("LANGCHAIN_API_KEY", settings.LANGCHAIN_API_KEY)
-        os.environ.setdefault("LANGCHAIN_PROJECT", settings.LANGCHAIN_PROJECT)
+        os.environ["LANGCHAIN_TRACING_V2"] = "true"
+        os.environ["LANGSMITH_TRACING"] = "true"
+        os.environ["LANGCHAIN_API_KEY"] = settings.LANGCHAIN_API_KEY
+        os.environ["LANGSMITH_API_KEY"] = settings.LANGCHAIN_API_KEY
+        os.environ["LANGCHAIN_PROJECT"] = settings.LANGCHAIN_PROJECT
+        os.environ["LANGSMITH_PROJECT"] = settings.LANGCHAIN_PROJECT
+        os.environ["LANGCHAIN_ENDPOINT"] = settings.LANGCHAIN_ENDPOINT
+        os.environ["LANGSMITH_ENDPOINT"] = settings.LANGCHAIN_ENDPOINT
         logger.info("langsmith_configured", project=settings.LANGCHAIN_PROJECT)
     except Exception as e:
         logger.warning("langsmith_setup_failed", error=str(e))

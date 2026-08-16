@@ -57,9 +57,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # 5. Configure LangSmith (if enabled)
     if settings.langsmith_enabled:
         os.environ["LANGCHAIN_TRACING_V2"] = "true"
+        os.environ["LANGSMITH_TRACING"] = "true"
         os.environ["LANGCHAIN_API_KEY"] = settings.LANGCHAIN_API_KEY
+        os.environ["LANGSMITH_API_KEY"] = settings.LANGCHAIN_API_KEY
         os.environ["LANGCHAIN_PROJECT"] = settings.LANGCHAIN_PROJECT
+        os.environ["LANGSMITH_PROJECT"] = settings.LANGCHAIN_PROJECT
         os.environ["LANGCHAIN_ENDPOINT"] = settings.LANGCHAIN_ENDPOINT
+        os.environ["LANGSMITH_ENDPOINT"] = settings.LANGCHAIN_ENDPOINT
         logger.info("langsmith_enabled", project=settings.LANGCHAIN_PROJECT)
 
     # 6. Pre-warm LangGraph graph (compile once at startup)

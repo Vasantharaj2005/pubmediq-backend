@@ -8,7 +8,7 @@ import json
 from functools import lru_cache
 from typing import Any
 
-from pydantic import AnyHttpUrl, field_validator
+from pydantic import AliasChoices, AnyHttpUrl, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -142,12 +142,32 @@ class Settings(BaseSettings):
     PUBMED_RATE_LIMIT: int = 3  # 3/s without key, 10/s with key
 
     # ------------------------------------------------------------------
-    # LangSmith
+    # LangSmith / LangChain Observability
     # ------------------------------------------------------------------
-    LANGCHAIN_TRACING_V2: bool = False
-    LANGCHAIN_API_KEY: str = ""
-    LANGCHAIN_PROJECT: str = "pubmediq-hackathon"
-    LANGCHAIN_ENDPOINT: str = "https://api.smith.langchain.com"
+    LANGCHAIN_TRACING_V2: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "LANGCHAIN_TRACING_V2", "LANGSMITH_TRACING", "LANGCHAIN_TRACING", "langchain_tracing_v2", "langsmith_tracing"
+        ),
+    )
+    LANGCHAIN_API_KEY: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "LANGCHAIN_API_KEY", "LANGSMITH_API_KEY", "langchain_api_key", "langsmith_api_key"
+        ),
+    )
+    LANGCHAIN_PROJECT: str = Field(
+        default="PubMedIQ",
+        validation_alias=AliasChoices(
+            "LANGCHAIN_PROJECT", "LANGSMITH_PROJECT", "langchain_project", "langsmith_project"
+        ),
+    )
+    LANGCHAIN_ENDPOINT: str = Field(
+        default="https://api.smith.langchain.com",
+        validation_alias=AliasChoices(
+            "LANGCHAIN_ENDPOINT", "LANGSMITH_ENDPOINT", "langchain_endpoint", "langsmith_endpoint"
+        ),
+    )
 
     # ------------------------------------------------------------------
     # Search Configuration

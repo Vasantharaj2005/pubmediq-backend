@@ -109,8 +109,17 @@ class SearchService:
         print(f"                        → [keyword | mesh | semantic] (parallel)")
         print(f"                        → fusion → reranker → quality_gate → [synthesize | refine]")
         logger.info("search_pipeline_start", query=request.query[:80], session_id=session_id)
+        config = {
+            "run_name": f"PubMedIQ Search: {request.query[:40]}",
+            "tags": ["pubmed_search", "langgraph", "pipeline"],
+            "metadata": {
+                "session_id": session_id,
+                "query": request.query,
+                "user_id": user_id or "anonymous",
+            },
+        }
         try:
-            final_state: ResearchState = await self._graph.ainvoke(initial_state)
+            final_state: ResearchState = await self._graph.ainvoke(initial_state, config=config)
             print(f"           ✅  Graph execution complete.")
         except Exception as e:
             print(f"           ❌  Graph execution FAILED: {e}")
@@ -193,7 +202,7 @@ class SearchService:
                     authors=paper.get("authors", []),
                     journal=paper.get("journal"),
                     year=paper.get("year"),
-                    score=round(paper.get("rerank_score", paper.get("rrf_score", 0.0)), 4),
+                    score=round(float(paper.get("rerank_score") or paper.get("rrf_score") or 0.0), 4),
                     semantic_score=paper.get("semantic_score"),
                     pub_types=paper.get("pub_types", []),
                     mesh_terms=paper.get("mesh_terms", []),
