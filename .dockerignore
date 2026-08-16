@@ -1,0 +1,39 @@
+﻿# Version control
+.git
+.gitignore
+
+# Environment files
+.env
+.env.*
+
+# Python caches and compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environment
+venv/
+env/
+.env/
+ENV/
+.venv/
+
+# IDE and editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Project specific
+logs/
+data/
+*.log
+sqlite3.db
+.pytest_cache/
+.coverage
+htmlcov/
+tests/
+
+# MacOS
+.DS_Store

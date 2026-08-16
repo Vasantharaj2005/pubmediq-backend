@@ -1,0 +1,56 @@
+﻿version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: pubmediq-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pubmediq
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: pubmediq
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pubmediq"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:alpine
+    container_name: pubmediq-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    # CI sets APP_IMAGE to the image pulled from the private Docker Hub repo.
+    image: ${APP_IMAGE:-pubmediq-backend:latest}
+    container_name: pubmediq-app
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: "postgresql+asyncpg://pubmediq:${DB_PASSWORD}@postgres:5432/pubmediq"
+      REDIS_URL: redis://redis:6379/0
+      PINECONE_API_KEY: ${PINECONE_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      LANGSMITH_API_KEY: ${LANGSMITH_API_KEY}
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:
