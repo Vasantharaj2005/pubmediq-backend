@@ -98,8 +98,8 @@ jobs:
     needs: push_to_ecr
     runs-on: self-hosted
     env:
-      # Use repository variable (non‑sensitive) instead of secret
-      DEPLOY_DIRECTORY: ${{ vars.DEPLOY_DIRECTORY }}
+      # ─── HARD‑CODED DIRECTORY ─────────────────────
+      DEPLOY_DIRECTORY: /home/ubuntu/pubmediq-backend
 
     steps:
       - name: Configure AWS credentials
@@ -119,17 +119,6 @@ jobs:
           docker image prune --all --force
           docker builder prune --all --force
           docker system df
-
-      # ─── DEBUG STEP: Show the value of DEPLOY_DIRECTORY ───
-      - name: Debug DEPLOY_DIRECTORY
-        run: |
-          echo "DEPLOY_DIRECTORY = '${DEPLOY_DIRECTORY}'"
-          if [ -z "$DEPLOY_DIRECTORY" ]; then
-            echo "❌ DEPLOY_DIRECTORY is empty!"
-            exit 1
-          else
-            echo "✅ DEPLOY_DIRECTORY is set."
-          fi
 
       - name: Validate EC2 deployment directory
         run: |
