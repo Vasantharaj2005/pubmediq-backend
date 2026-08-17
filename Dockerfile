@@ -20,7 +20,7 @@ RUN pip install --no-compile --only-binary=:all: -r requirements-prod.txt \
     && useradd --system --gid pubmediq --create-home pubmediq
 
 COPY --chown=pubmediq:pubmediq app ./app
-COPY --chown=pubmediq:pubmediq alembic.ini ./
+COPY --chown=pubmediq:pubmediq scripts ./scripts
 
 USER pubmediq
 
