@@ -17,8 +17,8 @@ permissions:
   id-token: write
 
 env:
-  AWS_REGION: ${{ vars.AWS_REGION }}
-  ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
 
 jobs:
   integration:
@@ -106,7 +106,7 @@ jobs:
     needs: push_to_ecr
     runs-on: self-hosted
     env:
-      DEPLOY_DIRECTORY: ${{ vars.DEPLOY_DIRECTORY }}
+      DEPLOY_DIRECTORY: ${{ secrets.DEPLOY_DIRECTORY }}
 
     steps:
       - name: Configure AWS credentials
