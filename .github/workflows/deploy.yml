@@ -14,7 +14,7 @@ concurrency:
 
 permissions:
   contents: read
-  id-token: write
+  # id-token: write   # not needed when using access keys
 
 env:
   AWS_REGION: ${{ secrets.AWS_REGION }}
@@ -74,12 +74,13 @@ jobs:
           test -n "$AWS_REGION"
           test -n "$ECR_REPOSITORY"
 
+      # ─── FIX: Use access keys instead of OIDC role ───
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
-          role-session-name: PubMedIQEcrBuild
 
       - name: Log in to Amazon ECR
         id: login-ecr
@@ -104,17 +105,18 @@ jobs:
   continuous_deployment:
     name: Deploy to AWS EC2
     needs: push_to_ecr
-    runs-on: self-hosted
+    runs-on: self-hosted   # your EC2 runner
     env:
       DEPLOY_DIRECTORY: ${{ secrets.DEPLOY_DIRECTORY }}
 
     steps:
+      # ─── FIX: Same – use access keys on self‑hosted runner ───
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
-          role-session-name: PubMedIQEcrDeploy
 
       - name: Log in to Amazon ECR
         id: login-ecr
@@ -133,7 +135,6 @@ jobs:
             echo "::error::Set the DEPLOY_DIRECTORY repository variable to the directory containing docker-compose.yml and .env."
             exit 1
           fi
-
           test -f "$DEPLOY_DIRECTORY/docker-compose.yml"
           test -f "$DEPLOY_DIRECTORY/.env"
 
@@ -164,11 +165,11 @@ jobs:
         run: |
           for attempt in $(seq 1 12); do
             if curl -s http://localhost:8000/api/v1/health | grep -q "status"; then
+              echo "FastAPI is healthy."
               exit 0
             fi
             sleep 5
           done
-
           echo "FastAPI did not become healthy."
           docker logs --tail 100 pubmediq-app || true
           exit 1
