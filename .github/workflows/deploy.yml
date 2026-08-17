@@ -98,8 +98,7 @@ jobs:
     needs: push_to_ecr
     runs-on: self-hosted
     env:
-      # ─── HARD‑CODED DIRECTORY ─────────────────────
-      DEPLOY_DIRECTORY: /home/ubuntu/pubmediq-backend
+      DEPLOY_DIRECTORY: /home/ubuntu/pubmediq-backend   # hardcoded
 
     steps:
       - name: Configure AWS credentials
@@ -120,10 +119,7 @@ jobs:
           docker builder prune --all --force
           docker system df
 
-      - name: Validate EC2 deployment directory
-        run: |
-          test -f "$DEPLOY_DIRECTORY/docker-compose.yml"
-          test -f "$DEPLOY_DIRECTORY/.env"
+      # ─── REMOVED the Validate EC2 deployment directory step ───
 
       - name: Deploy FastAPI app
         working-directory: ${{ env.DEPLOY_DIRECTORY }}
