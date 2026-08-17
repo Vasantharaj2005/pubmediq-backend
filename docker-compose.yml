@@ -1,73 +1,67 @@
-version: "3.9"
-
 services:
-  # ============================================================
-  # FastAPI Application
-  # ============================================================
-  api:
-    build:
-      context: ..
-      dockerfile: deployment/Dockerfile
-    container_name: pubmediq-api
-    ports:
-      - "8000:8000"
-    environment:
-      - APP_ENV=development
-      - DATABASE_URL=postgresql+asyncpg://pubmediq:pubmediq@postgres:5432/pubmediq
-      - REDIS_URL=redis://redis:6379/0
-    env_file:
-      - ../.env
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    volumes:
-      - ../app:/app/app  # hot reload in dev
-    restart: unless-stopped
-    networks:
-      - pubmediq-net
-
-  # ============================================================
-  # PostgreSQL Database
-  # ============================================================
   postgres:
     image: postgres:16-alpine
     container_name: pubmediq-postgres
+    restart: unless-stopped
     environment:
       POSTGRES_DB: pubmediq
       POSTGRES_USER: pubmediq
-      POSTGRES_PASSWORD: pubmediq
-    ports:
-      - "5432:5432"
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    cpus: 0.50
+    mem_limit: 768m
+    pids_limit: 128
+    shm_size: 128mb
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U pubmediq -d pubmediq"]
       interval: 10s
       timeout: 5s
       retries: 5
-    restart: unless-stopped
     networks:
       - pubmediq-net
 
-  # ============================================================
-  # Redis Cache
-  # ============================================================
   redis:
     image: redis:7-alpine
     container_name: pubmediq-redis
-    ports:
-      - "6379:6379"
-    command: redis-server --appendonly yes
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy allkeys-lru
     volumes:
       - redis_data:/data
+    cpus: 0.25
+    mem_limit: 256m
+    pids_limit: 64
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - pubmediq-net
+
+  app:
+    image: ${APP_IMAGE:-pubmediq-backend:latest}
+    container_name: pubmediq-app
     restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: "postgresql+asyncpg://pubmediq:${DB_PASSWORD}@postgres:5432/pubmediq"
+      REDIS_URL: redis://redis:6379/0
+      OMP_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+      TOKENIZERS_PARALLELISM: "false"
+    cpus: 1.0
+    mem_limit: 2g
+    pids_limit: 256
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - pubmediq-net
 

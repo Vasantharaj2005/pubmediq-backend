@@ -1,4 +1,4 @@
-﻿name: PubMedIQ AWS CI/CD
+name: PubMedIQ AWS CI/CD
 
 on:
   push:
@@ -14,9 +14,11 @@ concurrency:
 
 permissions:
   contents: read
+  id-token: write
 
 env:
-  IMAGE_NAME: pubmediq-backend
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
 
 jobs:
   integration:
@@ -32,19 +34,20 @@ jobs:
         with:
           python-version: '3.11'
           cache: 'pip'
+          cache-dependency-path: |
+            requirements.txt
+            requirements-prod.txt
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest pytest-asyncio
 
       - name: Run unit tests
-        run: |
-          pytest tests/
+        run: pytest tests/
 
-  push_to_registry:
-    name: Build and Push Docker Image
+  push_to_ecr:
+    name: Build and Push ECR Image
     needs: integration
     runs-on: ubuntu-latest
 
@@ -66,42 +69,56 @@ jobs:
             exit 1
           fi
 
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v4
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+      - name: Validate ECR settings
+        run: |
+          test -n "$AWS_REGION"
+          test -n "$ECR_REPOSITORY"
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: PubMedIQEcrBuild
+
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build and push Docker image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
-          USERNAME=$(echo "${{ secrets.DOCKER_USERNAME }}" | tr -d '[:space:]')
-          REPO="${USERNAME}/${{ env.IMAGE_NAME }}"
-          echo "Building and pushing to $REPO"
+          image_uri="${ECR_REGISTRY}/${ECR_REPOSITORY}"
+          echo "Building and pushing ${image_uri}"
 
-          # FIX: removed --context, using . as context at the end
           docker buildx build \
             --file ./Dockerfile \
             --push \
-            --tag "$REPO:main" \
-            --tag "$REPO:sha-${{ github.sha }}" \
+            --tag "${image_uri}:main" \
+            --tag "${image_uri}:sha-${{ github.sha }}" \
             --cache-from type=gha \
             --cache-to type=gha,mode=min \
             .
 
   continuous_deployment:
     name: Deploy to AWS EC2
-    needs: push_to_registry
-    runs-on: self-hosted  # <-- make sure you have a self-hosted runner on EC2
+    needs: push_to_ecr
+    runs-on: self-hosted
+    env:
+      DEPLOY_DIRECTORY: ${{ vars.DEPLOY_DIRECTORY }}
 
     steps:
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v4
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: PubMedIQEcrDeploy
+
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
 
       - name: Reclaim unused Docker resources
         run: |
@@ -110,22 +127,29 @@ jobs:
           docker builder prune --all --force
           docker system df
 
-      - name: Deploy FastAPI App
+      - name: Validate EC2 deployment directory
+        run: |
+          if [ -z "$DEPLOY_DIRECTORY" ]; then
+            echo "::error::Set the DEPLOY_DIRECTORY repository variable to the directory containing docker-compose.yml and .env."
+            exit 1
+          fi
+
+          test -f "$DEPLOY_DIRECTORY/docker-compose.yml"
+          test -f "$DEPLOY_DIRECTORY/.env"
+
+      - name: Deploy FastAPI app
+        working-directory: ${{ env.DEPLOY_DIRECTORY }}
         env:
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
-          USERNAME=$(echo "${{ secrets.DOCKER_USERNAME }}" | tr -d '[:space:]')
-          IMAGE_PATH="${USERNAME}/${{ env.IMAGE_NAME }}"
+          image_uri="${ECR_REGISTRY}/${ECR_REPOSITORY}"
+          echo "Pulling ${image_uri}:main"
+          docker pull "${image_uri}:main"
 
-          echo "Pulling $IMAGE_PATH:main"
-          docker pull "$IMAGE_PATH:main"
-
-          # Ensure postgres and redis are running first (if not already)
-          docker-compose up -d postgres redis
-
-          # Override the app image tag and restart app only
-          export APP_IMAGE="${IMAGE_PATH}:main"
-          docker-compose up -d --no-deps --force-recreate app
+          export APP_IMAGE="${image_uri}:main"
+          docker compose up -d postgres redis
+          docker compose up -d --no-deps --force-recreate app
 
       - name: Verify container is running
         run: |
@@ -135,23 +159,21 @@ jobs:
             docker logs pubmediq-app || true
             exit 1
           fi
-          echo "The FastAPI container is running."
 
       - name: Verify FastAPI health endpoint
         run: |
           for attempt in $(seq 1 12); do
             if curl -s http://localhost:8000/api/v1/health | grep -q "status"; then
-              echo "FastAPI application is healthy."
               exit 0
             fi
-            echo "Waiting for FastAPI to become ready..."
             sleep 5
           done
+
           echo "FastAPI did not become healthy."
           docker logs --tail 100 pubmediq-app || true
           exit 1
 
-      - name: Remove unused Docker images
+      - name: Remove unused Docker resources
         if: always()
         run: |
           docker image prune --all --force
