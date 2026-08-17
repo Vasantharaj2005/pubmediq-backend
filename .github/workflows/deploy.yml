@@ -6,6 +6,7 @@ on:
       - prod
     paths-ignore:
       - "README.md"
+
   workflow_dispatch:
 
 concurrency:
@@ -20,32 +21,48 @@ env:
   ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
 
 jobs:
+
+  # ============================================================
+  # 1. CONTINUOUS INTEGRATION
+  # ============================================================
   integration:
     name: Continuous Integration
     runs-on: ubuntu-latest
+
     steps:
+
       - name: Checkout repository
         uses: actions/checkout@v4
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-          cache: 'pip'
+          python-version: "3.11"
+          cache: "pip"
           cache-dependency-path: |
             requirements.txt
             requirements-prod.txt
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-      - name: Run unit tests
-        run: pytest tests/
 
+      - name: Run unit tests
+        run: |
+          pytest tests/
+
+
+  # ============================================================
+  # 2. BUILD AND PUSH DOCKER IMAGE TO AMAZON ECR
+  # ============================================================
   push_to_ecr:
     name: Build and Push ECR Image
     needs: integration
     runs-on: ubuntu-latest
+
     steps:
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -53,19 +70,33 @@ jobs:
         run: |
           docker builder prune --all --force || true
           docker image prune --all --force || true
+
           docker system df || true
+
           minimum_free_kb=12582912
+
           available_kb=$(df -Pk "$GITHUB_WORKSPACE" | awk 'NR == 2 { print $4 }')
+
           if [ "$available_kb" -lt "$minimum_free_kb" ]; then
-            echo "::error::Only $((available_kb / 1024 / 1024)) GiB is free; 12 GiB is required to build the image."
+            echo "::error::Only $((available_kb / 1024 / 1024)) GiB is free; 12 GiB is required."
             df -h "$GITHUB_WORKSPACE"
             exit 1
           fi
 
       - name: Validate ECR settings
         run: |
-          test -n "$AWS_REGION"
-          test -n "$ECR_REPOSITORY"
+          if [ -z "$AWS_REGION" ]; then
+            echo "::error::AWS_REGION is not configured."
+            exit 1
+          fi
+
+          if [ -z "$ECR_REPOSITORY" ]; then
+            echo "::error::ECR_REPOSITORY is not configured."
+            exit 1
+          fi
+
+          echo "AWS_REGION=${AWS_REGION}"
+          echo "ECR_REPOSITORY=${ECR_REPOSITORY}"
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
@@ -81,9 +112,17 @@ jobs:
       - name: Build and push Docker image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+
         run: |
+          set -e
+
           image_uri="${ECR_REGISTRY}/${ECR_REPOSITORY}"
-          echo "Building and pushing ${image_uri}"
+
+          echo "=========================================="
+          echo "Building Docker image"
+          echo "=========================================="
+          echo "${image_uri}"
+
           docker buildx build \
             --file ./Dockerfile \
             --push \
@@ -93,14 +132,63 @@ jobs:
             --cache-to type=gha,mode=min \
             .
 
+
+  # ============================================================
+  # 3. DEPLOY TO AWS EC2
+  # ============================================================
   continuous_deployment:
     name: Deploy to AWS EC2
     needs: push_to_ecr
     runs-on: self-hosted
+
     env:
-      DEPLOY_DIRECTORY: /home/ubuntu/pubmediq-backend   # hardcoded
+      DEPLOY_DIRECTORY: /home/ubuntu/pubmediq-backend
 
     steps:
+
+      # --------------------------------------------------------
+      # Checkout repository to GitHub runner workspace
+      # --------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          path: deployment-source
+
+
+      # --------------------------------------------------------
+      # Prepare EC2 deployment directory
+      # --------------------------------------------------------
+      - name: Prepare deployment directory
+        run: |
+          set -e
+
+          echo "=========================================="
+          echo "Preparing deployment directory"
+          echo "=========================================="
+
+          echo "Deployment directory:"
+          echo "${DEPLOY_DIRECTORY}"
+
+          mkdir -p "${DEPLOY_DIRECTORY}"
+
+          echo "Copying deployment files..."
+
+          rsync -a \
+            --exclude=".git" \
+            --exclude=".env" \
+            deployment-source/ \
+            "${DEPLOY_DIRECTORY}/"
+
+          echo "=========================================="
+          echo "Deployment directory contents"
+          echo "=========================================="
+
+          ls -lah "${DEPLOY_DIRECTORY}"
+
+
+      # --------------------------------------------------------
+      # Configure AWS
+      # --------------------------------------------------------
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
         with:
@@ -108,56 +196,261 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
+
+      # --------------------------------------------------------
+      # Login to Amazon ECR
+      # --------------------------------------------------------
       - name: Log in to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Reclaim unused Docker resources
-        run: |
-          docker container prune --force
-          docker image prune --all --force
-          docker builder prune --all --force
-          docker system df
 
-      # ─── REMOVED the Validate EC2 deployment directory step ───
-
-      - name: Deploy FastAPI app
+      # --------------------------------------------------------
+      # Check deployment files
+      # --------------------------------------------------------
+      - name: Validate deployment files
         working-directory: ${{ env.DEPLOY_DIRECTORY }}
-        env:
-          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-        run: |
-          image_uri="${ECR_REGISTRY}/${ECR_REPOSITORY}"
-          echo "Pulling ${image_uri}:main"
-          docker pull "${image_uri}:main"
-          export APP_IMAGE="${image_uri}:main"
-          docker compose up -d postgres redis
-          docker compose up -d --no-deps --force-recreate app
 
-      - name: Verify container is running
         run: |
-          sleep 10
-          if ! docker ps --filter "name=pubmediq-app" --filter "status=running" | grep -q "pubmediq-app"; then
-            echo "The FastAPI container failed to start."
-            docker logs pubmediq-app || true
+          set -e
+
+          echo "=========================================="
+          echo "Deployment validation"
+          echo "=========================================="
+
+          echo "Current directory:"
+          pwd
+
+          echo ""
+          echo "Files:"
+          ls -lah
+
+          echo ""
+          echo "Checking docker-compose.yml..."
+
+          if [ ! -f "docker-compose.yml" ]; then
+            echo "::error::docker-compose.yml not found!"
+            echo "Expected:"
+            echo "${DEPLOY_DIRECTORY}/docker-compose.yml"
             exit 1
           fi
 
+          echo "docker-compose.yml found."
+
+
+          echo ""
+          echo "Checking .env..."
+
+          if [ ! -f ".env" ]; then
+            echo "::warning::.env file not found."
+
+            echo "Creating .env from GitHub secrets/environment."
+
+            touch .env
+          fi
+
+          echo ""
+          echo "Checking Docker Compose..."
+
+          docker --version
+          docker compose version
+
+          echo ""
+          echo "Validating Compose configuration..."
+
+          docker compose \
+            -f docker-compose.yml \
+            config
+
+
+      # --------------------------------------------------------
+      # Reclaim Docker resources
+      # --------------------------------------------------------
+      - name: Reclaim unused Docker resources
+        run: |
+          set -e
+
+          docker container prune --force || true
+          docker image prune --all --force || true
+          docker builder prune --all --force || true
+
+          docker system df
+
+
+      # --------------------------------------------------------
+      # Deploy FastAPI
+      # --------------------------------------------------------
+      - name: Deploy FastAPI app
+        working-directory: ${{ env.DEPLOY_DIRECTORY }}
+
+        env:
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+
+        run: |
+          set -e
+
+          echo "=========================================="
+          echo "Starting PubMedIQ deployment"
+          echo "=========================================="
+
+          echo "Working directory:"
+          pwd
+
+          echo ""
+          echo "Files:"
+          ls -lah
+
+          image_uri="${ECR_REGISTRY}/${ECR_REPOSITORY}"
+
+          export APP_IMAGE="${image_uri}:main"
+
+          echo ""
+          echo "Docker image:"
+          echo "${APP_IMAGE}"
+
+          echo ""
+          echo "Pulling latest image..."
+
+          docker pull "${APP_IMAGE}"
+
+          echo ""
+          echo "Image successfully pulled."
+
+          echo ""
+          echo "Validating Compose configuration..."
+
+          docker compose \
+            -f docker-compose.yml \
+            config
+
+          echo ""
+          echo "Starting PostgreSQL and Redis..."
+
+          docker compose \
+            -f docker-compose.yml \
+            up -d postgres redis
+
+          echo ""
+          echo "Starting FastAPI application..."
+
+          docker compose \
+            -f docker-compose.yml \
+            up -d \
+            --no-deps \
+            --force-recreate \
+            app
+
+          echo ""
+          echo "Current containers:"
+
+          docker compose \
+            -f docker-compose.yml \
+            ps
+
+
+      # --------------------------------------------------------
+      # Verify container
+      # --------------------------------------------------------
+      - name: Verify container is running
+        working-directory: ${{ env.DEPLOY_DIRECTORY }}
+
+        run: |
+          set -e
+
+          echo "Waiting for FastAPI container..."
+
+          sleep 10
+
+          echo "=========================================="
+          echo "Docker Compose status"
+          echo "=========================================="
+
+          docker compose \
+            -f docker-compose.yml \
+            ps
+
+          echo ""
+          echo "=========================================="
+          echo "Checking pubmediq-app"
+          echo "=========================================="
+
+          if ! docker ps \
+            --filter "name=pubmediq-app" \
+            --filter "status=running" \
+            --format "{{.Names}}" | grep -q "^pubmediq-app$"; then
+
+            echo "::error::The FastAPI container failed to start."
+
+            echo ""
+            echo "Container logs:"
+            docker logs pubmediq-app || true
+
+            echo ""
+            echo "Docker Compose logs:"
+            docker compose \
+              -f docker-compose.yml \
+              logs --tail=100 app || true
+
+            exit 1
+          fi
+
+          echo "FastAPI container is running."
+
+
+      # --------------------------------------------------------
+      # Health check
+      # --------------------------------------------------------
       - name: Verify FastAPI health endpoint
         run: |
+          set -e
+
+          echo "=========================================="
+          echo "Checking FastAPI health"
+          echo "=========================================="
+
           for attempt in $(seq 1 12); do
-            if curl -s http://localhost:8000/api/v1/health | grep -q "status"; then
+
+            echo "Health check attempt ${attempt}/12..."
+
+            if curl \
+              --fail \
+              --silent \
+              --show-error \
+              http://localhost:8000/api/v1/health | grep -q "status"; then
+
               echo "FastAPI is healthy."
               exit 0
             fi
+
+            echo "FastAPI is not ready yet."
             sleep 5
+
           done
-          echo "FastAPI did not become healthy."
-          docker logs --tail 100 pubmediq-app || true
+
+          echo "::error::FastAPI did not become healthy."
+
+          echo ""
+          echo "FastAPI container logs:"
+
+          docker logs \
+            --tail 100 \
+            pubmediq-app || true
+
           exit 1
 
+
+      # --------------------------------------------------------
+      # Cleanup
+      # --------------------------------------------------------
       - name: Remove unused Docker resources
         if: always()
         run: |
-          docker image prune --all --force
-          docker builder prune --all --force
+          docker image prune --all --force || true
+          docker builder prune --all --force || true
+
+          echo "=========================================="
+          echo "Docker disk usage"
+          echo "=========================================="
+
+          docker system df
