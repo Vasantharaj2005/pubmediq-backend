@@ -21,6 +21,22 @@ from app.schemas.research import (
     SummarizeRequest,
 )
 
+from app.observability.langsmith import trace
+
+class ResearchService:
+    ...
+    @trace(name="research_summarize", tags=["research", "summarize"])
+    async def summarize(self, request: SummarizeRequest) -> ResearchResponse:
+        ...
+
+    @trace(name="research_compare", tags=["research", "compare"])
+    async def compare(self, request: CompareRequest) -> ResearchResponse:
+        ...
+
+    @trace(name="research_gap_analysis", tags=["research", "gap_analysis"])
+    async def gap_analysis(self, request: GapAnalysisRequest) -> ResearchResponse:
+        ...
+
 logger = get_logger(__name__)
 
 _SUMMARIZE_SYSTEM = """You are a systematic review expert. Summarize the provided PubMed papers
